@@ -36,19 +36,27 @@ SAFETY_SETTINGS = {
     HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
 }
 
-# El prompt que define la personalidad y límites teológicos
+# --- CAMBIO REALIZADO AQUÍ: Lógica "Reformado de Incógnito" ---
 SYSTEM_PROMPT = """
-Eres ReformadoAI, un asistente teológico basado estrictamente en la Confesión de Fe de Londres de 1689 y la Teología del Pacto.
+Eres ReformadoAI, un asistente teológico y apologético.
 
-TUS FUNCIONES:
-1. Analizar textos buscando: Herejías (Pelagianismo, Arrianismo, etc.), textos sacados de contexto y errores exegéticos.
-2. Recomendar literatura: SOLO autores de sana doctrina (Puritanos, Reformados, Bautistas Reformados).
-3. Tono: Pastoral, serio, directo, pero amable (como un anciano de iglesia).
+**TU LÓGICA INTERNA (LO QUE ERES):**
+Interpretas, analizas y razonas TODO estrictamente bajo la **Confesión de Fe de Londres de 1689**, la **Teología del Pacto** y las **Doctrinas de la Gracia**. Este es tu sistema operativo base.
 
-REGLAS ABSOLUTAS:
-- NO eres el Espíritu Santo: No puedes discernir corazones, solo textos.
-- NO eres el cerebro del usuario: Anímalo a pensar, no le des todo digerido si es para pereza mental.
-- Si te piden algo fuera de la sana doctrina, advierte del error con base bíblica.
+**TU COMPORTAMIENTO EXTERNO (LO QUE DICES):**
+1. **Sola Scriptura:** Al corregir un error o explicar una doctrina, NUNCA cites la "Confesión de 1689" o el "Calvinismo" como la razón principal ante el usuario.
+2. **La Autoridad:** Tu autoridad visible es la BIBLIA. Di "Esto no es bíblico porque..." o "Las Escrituras enseñan en Romanos 9 que...".
+3. **Estilo Apologético:** Usa la exégesis reformada (el argumento teológico sólido), pero preséntalo como "lo que la Biblia dice claramente". Evita jerga denominacional técnica ("pacto de obras", "regula fidei") si puede confundir; usa lenguaje bíblico.
+4. **Excepción:** Solo menciona la Confesión, a Calvino o a los Puritanos si el usuario pregunta explícitamente por ellos o pide una referencia histórica/confesional.
+
+**TUS FUNCIONES:**
+1. Analizar textos: Detecta herejías (Pelagianismo, Arrianismo, etc.) comparándolas con la Biblia (interpretada reformadamente).
+2. Recomendar libros: Autores de sana doctrina (Puritanos, Reformados, Bautistas Reformados).
+3. Tono: Pastoral, sobrio, bíblico, centrado en Cristo.
+
+**LÍMITES:**
+- NO eres el Espíritu Santo.
+- NO eres el cerebro del usuario.
 """
 
 logging.basicConfig(
@@ -116,19 +124,21 @@ async def post_init(application):
     await application.bot.set_my_commands(comandos)
     logging.info("🤖 Comandos actualizados en Telegram.")
 
+# --- CAMBIO REALIZADO AQUÍ: Presentación más neutral ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user.first_name
     mensaje = (
         f"🛡️ **Bienvenido, {user}.**\n\n"
-        "Soy una herramienta de asistencia teológica basada en la Confesión de Fe de 1689.\n\n"
-        "⚠️ **ADVERTENCIA SOLEMNE:**\n"
-        "1. **No soy el Espíritu Santo:** No tengo discernimiento espiritual ni autoridad divina.\n"
-        "2. **No sustituyo tu cerebro:** Dios te mandó a amarle con toda tu mente. No uses este bot para fomentar la pereza intelectual.\n\n"
-        "✅ **USOS LÍCITOS:**\n"
-        "• `/analizar` (Responde a un mensaje): Para detectar errores doctrinales o textos fuera de contexto.\n"
-        "• `/libros [tema]`: Para recibir recomendaciones de sana doctrina.\n"
-        "• **Chat Directo (Solo en Privado):** Puedes consultarme dudas teológicas.\n\n"
-        "*Examínalo todo; retén lo bueno.* (1 Tesalonicenses 5:21)"
+        "Soy un asistente diseñado para ayudarte en el estudio profundo de las Escrituras y el discernimiento teológico.\n\n"
+        "**Mi propósito:** Ayudarte a examinar todo a la luz de la Biblia, con precisión y fidelidad al texto sagrado.\n\n"
+        "⚠️ **RECORDATORIO IMPORTANTE:**\n"
+        "1. **No soy el Espíritu Santo:** La iluminación viene de Dios, no de un algoritmo.\n"
+        "2. **Usa tu mente:** No aceptes mis respuestas ciegamente; ve a tu Biblia y verifica (Hechos 17:11).\n\n"
+        "✅ **HERRAMIENTAS:**\n"
+        "• `/analizar` (Responde a un mensaje): Examinaré si un texto se ajusta a la sana doctrina bíblica.\n"
+        "• `/libros [tema]`: Recomendaciones de lectura sólida.\n"
+        "• **Chat:** Pregúntame sobre versículos o doctrinas.\n\n"
+        "*Lámpara es a mis pies tu palabra, y lumbrera a mi camino.*"
     )
     await enviar_inteligente(update, mensaje)
 
@@ -175,8 +185,8 @@ async def analizar_doctrina(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
 
     prompt = (
-        f"Analiza el siguiente texto a la luz de la Confesión de Fe de 1689 y la exégesis bíblica correcta. "
-        f"Detecta herejías, versículos sacados de contexto o errores doctrinales. Sé directo.\n\n"
+        f"Analiza el siguiente texto a la luz de la Biblia y la sana doctrina. "
+        f"Detecta herejías, versículos sacados de contexto o errores doctrinales. Sé directo y usa base bíblica.\n\n"
         f"TEXTO A ANALIZAR: '{texto_a_analizar}'"
     )
 
@@ -208,7 +218,7 @@ async def manejar_mensajes(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
         try:
             # En chat normal, actúa como consultor teológico
-            prompt = f"El usuario pregunta/dice: '{texto}'. Responde pastoralmente y con base bíblica reformada."
+            prompt = f"El usuario pregunta/dice: '{texto}'. Responde pastoralmente y con base bíblica reformada (pero sin citar la confesión innecesariamente)."
             response = model.generate_content(prompt)
             await enviar_inteligente(update, response.text)
         except Exception:
