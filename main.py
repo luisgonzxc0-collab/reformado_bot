@@ -3,33 +3,32 @@ import asyncio
 import os
 import threading
 from flask import Flask
-from telegram import Update, BotCommand
+from telegram import Update, BotCommand, MessageEntity
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters
+from telegram.error import BadRequest
 import google.generativeai as genai
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 from time import time
 from functools import wraps
 
-# --- 1. CONFIGURACIÓN SEGURA (VARIABLES DE ENTORNO) ---
-# En lugar de poner las claves aquí, las pediremos al sistema.
+# --- 1. CONFIGURACIÓN Y VARIABLES DE ENTORNO ---
+# Estas variables DEBEN configurarse en el panel de Render
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-MODEL_NAME = "gemini-2.5-flash"
+MODEL_NAME = "gemini-2.5-flash" # Usamos la versión estable y rápida
 
 # --- 2. SERVIDOR WEB "KEEP ALIVE" PARA RENDER ---
-# Esto es necesario para que Render no apague el bot.
 app = Flask(__name__)
 
 @app.route('/')
 def health_check():
-    return "El bot está vivo y sirviendo al Señor.", 200
+    return "Soli Deo Gloria. El bot está online.", 200
 
 def run_flask():
-    # Render asigna un puerto dinámico en la variable de entorno PORT
     port = int(os.environ.get("PORT", 8080))
     app.run(host='0.0.0.0', port=port)
 
-# --- CONFIGURACIÓN GEMINI ---
+# --- 3. CONFIGURACIÓN GEMINI (CEREBRO TEOLÓGICO) ---
 SAFETY_SETTINGS = {
     HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
     HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
@@ -37,15 +36,19 @@ SAFETY_SETTINGS = {
     HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
 }
 
+# El prompt que define la personalidad y límites teológicos
 SYSTEM_PROMPT = """
-Eres ReformadoAI, asistente teológico apologético (Confesión de Fe de Londres de 1689).
-DIRECTRICES:
-1. Ortodoxia: Sola Scriptura, Doctrinas de la Gracia.
-2. Análisis: Detecta herejías, errores y textos fuera de contexto.
-3. Estilo: Pastoral, serio, sin rodeos.
-REGLAS DE ORO:
-- NO sustituyas al Espíritu Santo.
-- NO pienses por el usuario; edifícalo.
+Eres ReformadoAI, un asistente teológico basado estrictamente en la Confesión de Fe de Londres de 1689 y la Teología del Pacto.
+
+TUS FUNCIONES:
+1. Analizar textos buscando: Herejías (Pelagianismo, Arrianismo, etc.), textos sacados de contexto y errores exegéticos.
+2. Recomendar literatura: SOLO autores de sana doctrina (Puritanos, Reformados, Bautistas Reformados).
+3. Tono: Pastoral, serio, directo, pero amable (como un anciano de iglesia).
+
+REGLAS ABSOLUTAS:
+- NO eres el Espíritu Santo: No puedes discernir corazones, solo textos.
+- NO eres el cerebro del usuario: Anímalo a pensar, no le des todo digerido si es para pereza mental.
+- Si te piden algo fuera de la sana doctrina, advierte del error con base bíblica.
 """
 
 logging.basicConfig(
@@ -53,9 +56,9 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-# Validación de claves antes de iniciar
+# Verificación de seguridad al inicio
 if not GEMINI_API_KEY or not TELEGRAM_TOKEN:
-    logging.error("❌ FALTAN LAS VARIABLES DE ENTORNO. Configúralas en Render.")
+    logging.error("❌ ERROR CRÍTICO: Faltan las variables de entorno TELEGRAM_TOKEN o GEMINI_API_KEY.")
     exit(1)
 
 try:
@@ -65,131 +68,169 @@ try:
         system_instruction=SYSTEM_PROMPT,
         safety_settings=SAFETY_SETTINGS
     )
-    logging.info(f"✅ Gemini {MODEL_NAME} configurado correctamente")
+    logging.info(f"✅ Gemini {MODEL_NAME} teológico configurado.")
 except Exception as e:
-    logging.error(f"❌ Error Gemini: {e}")
+    logging.error(f"❌ Error configurando Gemini: {e}")
     exit(1)
 
-# --- RATE LIMITING ---
-user_last_request = {}
+# --- 4. UTILIDADES ---
 
+# Rate Limiter para evitar spam
+user_last_request = {}
 def rate_limit(seconds=3):
     def decorator(func):
         @wraps(func)
         async def wrapper(update, context):
+            if not update.effective_user: return
             user_id = update.effective_user.id
             now = time()
             if user_id in user_last_request:
                 if now - user_last_request[user_id] < seconds:
-                    return
+                    return # Ignorar si es muy rápido
             user_last_request[user_id] = now
             return await func(update, context)
         return wrapper
     return decorator
 
-# --- ENVÍO SEGURO ---
-async def enviar_respuesta_segura(update: Update, texto: str, reply_id: int = None):
-    MAX_LENGTH = 4000
-    chat_id = update.effective_chat.id
-    # Obtenemos el objeto bot del contexto o update
-    bot = context.bot if 'context' in locals() else update.get_bot()
+# Función de ENVÍO INTELIGENTE (Soluciona el error de Markdown)
+async def enviar_inteligente(update: Update, texto: str):
+    """Intenta enviar Markdown, si falla, envía texto plano."""
+    try:
+        # Reemplazo básico para ayudar a Telegram
+        texto_limpio = texto.replace("**", "*") 
+        await update.message.reply_text(texto_limpio[:4096], parse_mode='Markdown')
+    except BadRequest:
+        logging.warning("⚠️ Formato Markdown falló, reintentando como texto plano.")
+        await update.message.reply_text(texto[:4096]) # Fallback a texto plano
+    except Exception as e:
+        logging.error(f"Error enviando mensaje: {e}")
 
-    async def intentar_enviar(bloque):
-        try:
-            await bot.send_message(chat_id=chat_id, text=bloque, parse_mode='Markdown', reply_to_message_id=reply_id)
-        except Exception:
-            try:
-                await bot.send_message(chat_id=chat_id, text=bloque, reply_to_message_id=reply_id)
-            except Exception as e2:
-                logging.error(f"Error crítico enviando mensaje: {e2}")
+# --- 5. COMANDOS ---
 
-    if len(texto) <= MAX_LENGTH:
-        await intentar_enviar(texto)
-    else:
-        partes = [texto[i:i+MAX_LENGTH] for i in range(0, len(texto), MAX_LENGTH)]
-        for parte in partes:
-            await intentar_enviar(parte)
-            await asyncio.sleep(0.5)
-
-# --- COMANDOS ---
 async def post_init(application):
     comandos = [
-        BotCommand("start", "Advertencias y Uso"),
+        BotCommand("start", "Instrucciones y Advertencias"),
+        BotCommand("analizar", "Detectar herejías/errores (responde a msg)"),
         BotCommand("libros", "Bibliografía reformada"),
-        BotCommand("analizar", "Detectar errores teológicos"),
     ]
     await application.bot.set_my_commands(comandos)
-    bot_info = await application.bot.get_me()
-    logging.info(f"🤖 Bot iniciado como @{bot_info.username}")
+    logging.info("🤖 Comandos actualizados en Telegram.")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user.first_name
     mensaje = (
-        f"🛡️ **ReformadoAI en línea.**\n"
-        f"Gracia y paz, {user}.\n\n"
-        "⚠️ **ADVERTENCIA FUNDAMENTAL:**\n"
-        "1. **No soy el Espíritu Santo.**\n"
-        "2. **No sustituyo tu cerebro.**\n\n"
+        f"🛡️ **Bienvenido, {user}.**\n\n"
+        "Soy una herramienta de asistencia teológica basada en la Confesión de Fe de 1689.\n\n"
+        "⚠️ **ADVERTENCIA SOLEMNE:**\n"
+        "1. **No soy el Espíritu Santo:** No tengo discernimiento espiritual ni autoridad divina.\n"
+        "2. **No sustituyo tu cerebro:** Dios te mandó a amarle con toda tu mente. No uses este bot para fomentar la pereza intelectual.\n\n"
         "✅ **USOS LÍCITOS:**\n"
-        "• `/analizar` (responde a un mensaje)\n"
-        "• `/libros [tema]`\n"
+        "• `/analizar` (Responde a un mensaje): Para detectar errores doctrinales o textos fuera de contexto.\n"
+        "• `/libros [tema]`: Para recibir recomendaciones de sana doctrina.\n"
+        "• **Chat Directo (Solo en Privado):** Puedes consultarme dudas teológicas.\n\n"
+        "*Examínalo todo; retén lo bueno.* (1 Tesalonicenses 5:21)"
     )
-    # Usamos el método simple para start
-    await update.message.reply_text(mensaje, parse_mode='Markdown')
+    await enviar_inteligente(update, mensaje)
 
 @rate_limit(seconds=5)
 async def recomendar_libros(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.args:
-        await update.message.reply_text("Uso: `/libros <tema>`")
-        return
     tema = " ".join(context.args)
+    if not tema:
+        await update.message.reply_text("📚 Uso: `/libros [tema]`\nEjemplo: `/libros atributos de Dios`")
+        return
+
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+    
+    prompt = (
+        f"Recomienda 3 a 5 libros de estricta sana doctrina (Reformada/Puritana) sobre: '{tema}'. "
+        "Incluye autor y una razón breve de por qué edifica. Evita autores de prosperidad o liberales."
+    )
+    
     try:
-        prompt = f"Recomienda 5 libros reformados sobre: {tema}. Breve descripción."
         response = model.generate_content(prompt)
-        # Nota: Aquí deberías llamar a enviar_respuesta_segura, pero por simplicidad:
-        await update.message.reply_text(response.text, parse_mode='Markdown')
+        await enviar_inteligente(update, response.text)
     except Exception as e:
-        logging.error(f"Error: {e}")
-        await update.message.reply_text("Error temporal.")
+        await update.message.reply_text("Error consultando la biblioteca.")
 
 @rate_limit(seconds=5)
 async def analizar_doctrina(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    texto = ""
-    if update.message.reply_to_message:
-        texto = update.message.reply_to_message.text or update.message.reply_to_message.caption
-    elif context.args:
-        texto = " ".join(context.args)
+    # Lógica para detectar qué analizar (Reply o Argumentos)
+    texto_a_analizar = ""
     
-    if not texto:
-        await update.message.reply_text("Responde a un mensaje con `/analizar`.")
+    if update.message.reply_to_message:
+        # Si responde a un mensaje, analiza ese mensaje
+        texto_a_analizar = update.message.reply_to_message.text or update.message.reply_to_message.caption
+    elif context.args:
+        # Si escribe /analizar texto...
+        texto_a_analizar = " ".join(context.args)
+    
+    if not texto_a_analizar:
+        await update.message.reply_text(
+            "⚠️ **Error de uso:**\n"
+            "1. Responde a un mensaje con `/analizar`\n"
+            "2. O escribe: `/analizar [texto dudoso]`"
+        )
         return
 
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
-    try:
-        prompt = f"Analiza teológicamente según la Confesión de Fe de 1689: '{texto}'"
-        response = model.generate_content(prompt)
-        await update.message.reply_text(response.text[:4000], parse_mode='Markdown')
-    except Exception as e:
-        await update.message.reply_text("Error en el análisis.")
 
-# --- MAIN EJECUCIÓN ---
+    prompt = (
+        f"Analiza el siguiente texto a la luz de la Confesión de Fe de 1689 y la exégesis bíblica correcta. "
+        f"Detecta herejías, versículos sacados de contexto o errores doctrinales. Sé directo.\n\n"
+        f"TEXTO A ANALIZAR: '{texto_a_analizar}'"
+    )
+
+    try:
+        response = model.generate_content(prompt)
+        await enviar_inteligente(update, response.text)
+    except Exception as e:
+        await update.message.reply_text("Error en el análisis teológico.")
+
+# --- 6. MANEJO DE CHAT (PV vs GRUPOS) ---
+
+@rate_limit(seconds=2)
+async def manejar_mensajes(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Ignorar mensajes sin texto
+    if not update.message or not update.message.text:
+        return
+
+    tipo_chat = update.effective_chat.type
+    texto = update.message.text
+    bot_username = context.bot.username
+
+    # CONDICIÓN 1: En Privado -> Responder Siempre
+    # CONDICIÓN 2: En Grupo -> Responder solo si mencionan al bot (@botname)
+    
+    es_privado = tipo_chat == 'private'
+    es_mencion = f"@{bot_username}" in texto or (update.message.reply_to_message and update.message.reply_to_message.from_user.username == bot_username)
+
+    if es_privado or es_mencion:
+        await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+        try:
+            # En chat normal, actúa como consultor teológico
+            prompt = f"El usuario pregunta/dice: '{texto}'. Responde pastoralmente y con base bíblica reformada."
+            response = model.generate_content(prompt)
+            await enviar_inteligente(update, response.text)
+        except Exception:
+            pass # Ignorar errores en chat casual para no saturar
+
+# --- MAIN ---
 if __name__ == '__main__':
-    # 1. Iniciar el servidor Flask en un hilo separado
+    # 1. Hilo del Servidor Web (Para Render)
     flask_thread = threading.Thread(target=run_flask)
     flask_thread.daemon = True
     flask_thread.start()
 
-    # 2. Iniciar el Bot
+    # 2. Configuración del Bot
     application = ApplicationBuilder().token(TELEGRAM_TOKEN).post_init(post_init).build()
     
+    # Handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("libros", recomendar_libros))
     application.add_handler(CommandHandler("analizar", analizar_doctrina))
     
-    # Manejador de menciones en grupos
-    # Nota: Para que funcione en grupos, el bot debe tener permisos y Privacy Mode desactivado en BotFather si quieres que lea todo,
-    # pero para menciones específicas, usa filtros.
+    # Manejador general de texto (debe ir al final)
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, manejar_mensajes))
     
-    print("🚀 Bot ReformadoAI iniciando...")
+    print("🚀 ReformadoAI: Iniciando servicios...")
     application.run_polling()
