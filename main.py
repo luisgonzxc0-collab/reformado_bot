@@ -14,7 +14,7 @@ from functools import wraps
 # En lugar de poner las claves aquí, las pediremos al sistema.
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-MODEL_NAME = "gemini-2.0-flash-exp"
+MODEL_NAME = "gemini-2.5-flash"
 
 # --- 2. SERVIDOR WEB "KEEP ALIVE" PARA RENDER ---
 # Esto es necesario para que Render no apague el bot.
